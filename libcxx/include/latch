@@ -48,7 +48,6 @@ namespace std
 
 #include <__assert> // all public C++ headers provide the assertion handler
 #include <__atomic/atomic_base.h>
-#include <__atomic/atomic_sync.h>
 #include <__atomic/memory_order.h>
 #include <__availability>
 #include <cstddef>
@@ -99,7 +98,11 @@ public:
   }
   inline _LIBCPP_HIDE_FROM_ABI bool try_wait() const noexcept { return 0 == __a_.load(memory_order_acquire); }
   inline _LIBCPP_AVAILABILITY_SYNC _LIBCPP_HIDE_FROM_ABI void wait() const {
-    __cxx_atomic_wait(&__a_.__a_, [this]() -> bool { return try_wait(); });
+    auto __old = __a_.load(memory_order_acquire);
+    while (__old != 0) {
+      __a_.wait(__old, std::memory_order_relaxed);
+      __old = __a_.load(memory_order_acquire);
+    }
   }
   inline _LIBCPP_AVAILABILITY_SYNC _LIBCPP_HIDE_FROM_ABI void arrive_and_wait(ptrdiff_t __update = 1) {
     _LIBCPP_ASSERT_ARGUMENT_WITHIN_DOMAIN(__update >= 0, "latch::arrive_and_wait called with a negative value");
