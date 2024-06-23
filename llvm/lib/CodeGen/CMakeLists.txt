@@ -1,22 +1,51 @@
+if (DEFINED LLVM_HAVE_TF_AOT OR LLVM_HAVE_TFLITE)
+  include(TensorFlowCompile)
+  set(LLVM_RAEVICT_MODEL_PATH_DEFAULT "models/regalloc-eviction")
+
+  set(LLVM_RAEVICT_MODEL_CURRENT_URL "<UNSPECIFIED>" CACHE STRING "URL to download the LLVM register allocator eviction model")
+
+  if (DEFINED LLVM_HAVE_TF_AOT)
+    tf_find_and_compile(
+      ${LLVM_RAEVICT_MODEL_PATH}
+      ${LLVM_RAEVICT_MODEL_CURRENT_URL}
+      ${LLVM_RAEVICT_MODEL_PATH_DEFAULT}
+      "../Analysis/models/gen-regalloc-eviction-test-model.py"
+      serve
+      action
+      RegAllocEvictModel
+      llvm::RegAllocEvictModel
+    )
+  endif()
+
+  if (LLVM_HAVE_TFLITE)
+    list(APPEND MLLinkDeps ${tensorflow_c_api} ${tensorflow_fx})
+  endif()
+endif()
+
 add_llvm_component_library(LLVMCodeGen
   AggressiveAntiDepBreaker.cpp
   AllocationOrder.cpp
   Analysis.cpp
+  AssignmentTrackingAnalysis.cpp
   AtomicExpandPass.cpp
   BasicTargetTransformInfo.cpp
   BranchFolding.cpp
   BranchRelaxation.cpp
   BreakFalseDeps.cpp
   BasicBlockSections.cpp
+  BasicBlockPathCloning.cpp
+  BasicBlockSectionsProfileReader.cpp
   CalcSpillWeights.cpp
+  CallBrPrepare.cpp
   CallingConvLower.cpp
   CFGuardLongjmp.cpp
+  CFIFixup.cpp
   CFIInstrInserter.cpp
   CodeGen.cpp
   CodeGenCommonISel.cpp
-  CodeGenPassBuilder.cpp
   CodeGenPrepare.cpp
   CommandFlags.cpp
+  ComplexDeinterleavingPass.cpp
   CriticalAntiDepBreaker.cpp
   DeadMachineInstructionElim.cpp
   DetectDeadLanes.cpp
@@ -26,6 +55,8 @@ add_llvm_component_library(LLVMCodeGen
   EdgeBundles.cpp
   EHContGuardCatchret.cpp
   ExecutionDomainFix.cpp
+  ExpandLargeDivRem.cpp
+  ExpandLargeFpConvert.cpp
   ExpandMemCmp.cpp
   ExpandPostRAPseudos.cpp
   ExpandReductions.cpp
@@ -35,6 +66,7 @@ add_llvm_component_library(LLVMCodeGen
   FinalizeISel.cpp
   FixupStatepointCallerSaved.cpp
   FuncletLayout.cpp
+  MachineFunctionAnalysis.cpp
   GCMetadata.cpp
   GCMetadataPrinter.cpp
   GCRootLowering.cpp
@@ -43,11 +75,14 @@ add_llvm_component_library(LLVMCodeGen
   IfConversion.cpp
   ImplicitNullChecks.cpp
   IndirectBrExpandPass.cpp
+  InitUndef.cpp
   InlineSpiller.cpp
   InterferenceCache.cpp
   InterleavedAccessPass.cpp
   InterleavedLoadCombinePass.cpp
   IntrinsicLowering.cpp
+  JMCInstrumenter.cpp
+  KCFI.cpp
   LatencyPriorityQueue.cpp
   LazyMachineBlockFrequencyInfo.cpp
   LexicalScopes.cpp
@@ -67,13 +102,15 @@ add_llvm_component_library(LLVMCodeGen
   LLVMTargetMachine.cpp
   LocalStackSlotAllocation.cpp
   LoopTraversal.cpp
-  LowLevelType.cpp
+  LowLevelTypeUtils.cpp
   LowerEmuTLS.cpp
   MachineBasicBlock.cpp
   MachineBlockFrequencyInfo.cpp
   MachineBlockPlacement.cpp
   MachineBranchProbabilityInfo.cpp
+  MachineCFGPrinter.cpp
   MachineCombiner.cpp
+  MachineConvergenceVerifier.cpp
   MachineCopyPropagation.cpp
   MachineCSE.cpp
   MachineCheckDebugify.cpp
@@ -88,6 +125,7 @@ add_llvm_component_library(LLVMCodeGen
   MachineFunctionSplitter.cpp
   MachineInstrBundle.cpp
   MachineInstr.cpp
+  MachineLateInstrsCleanup.cpp
   MachineLICM.cpp
   MachineLoopInfo.cpp
   MachineLoopUtils.cpp
@@ -109,11 +147,13 @@ add_llvm_component_library(LLVMCodeGen
   MachineSSAUpdater.cpp
   MachineStripDebug.cpp
   MachineTraceMetrics.cpp
+  MachineUniformityAnalysis.cpp
   MachineVerifier.cpp
   MIRFSDiscriminator.cpp
   MIRSampleProfile.cpp
   MIRYamlMapping.cpp
-  MLRegallocEvictAdvisor.cpp
+  MLRegAllocEvictAdvisor.cpp
+  MLRegAllocPriorityAdvisor.cpp
   ModuloSchedule.cpp
   MultiHazardRecognizer.cpp
   PatchableFunction.cpp
@@ -144,11 +184,13 @@ add_llvm_component_library(LLVMCodeGen
   RegAllocFast.cpp
   RegAllocGreedy.cpp
   RegAllocPBQP.cpp
+  RegAllocPriorityAdvisor.cpp
   RegAllocScore.cpp
   RegisterClassInfo.cpp
   RegisterCoalescer.cpp
   RegisterPressure.cpp
   RegisterScavenging.cpp
+  GCEmptyBasicBlocks.cpp
   RemoveRedundantDebugValues.cpp
   RenameIndependentSubregs.cpp
   MachineStableHash.cpp
@@ -160,12 +202,16 @@ add_llvm_component_library(LLVMCodeGen
   RegUsageInfoPropagate.cpp
   ReplaceWithVeclib.cpp
   ResetMachineFunctionPass.cpp
+  RegisterBank.cpp
+  RegisterBankInfo.cpp
   SafeStack.cpp
   SafeStackLayout.cpp
+  SanitizerBinaryMetadata.cpp
   ScheduleDAG.cpp
   ScheduleDAGInstrs.cpp
   ScheduleDAGPrinter.cpp
   ScoreboardHazardRecognizer.cpp
+  SelectOptimize.cpp
   ShadowStackGCLowering.cpp
   ShrinkWrap.cpp
   SjLjEHPrepare.cpp
@@ -173,6 +219,7 @@ add_llvm_component_library(LLVMCodeGen
   SpillPlacement.cpp
   SplitKit.cpp
   StackColoring.cpp
+  StackFrameLayoutAnalysisPass.cpp
   StackMapLivenessAnalysis.cpp
   StackMaps.cpp
   StackProtector.cpp
@@ -190,8 +237,8 @@ add_llvm_component_library(LLVMCodeGen
   TargetRegisterInfo.cpp
   TargetSchedule.cpp
   TargetSubtargetInfo.cpp
-  TypePromotion.cpp
   TwoAddressInstructionPass.cpp
+  TypePromotion.cpp
   UnreachableBlockElim.cpp
   ValueTypes.cpp
   VLIWMachineScheduler.cpp
@@ -199,6 +246,7 @@ add_llvm_component_library(LLVMCodeGen
   WasmEHPrepare.cpp
   WinEHPrepare.cpp
   XRayInstrumentation.cpp
+  ${GeneratedMLSources}
 
   LiveDebugValues/LiveDebugValues.cpp
   LiveDebugValues/VarLocBasedImpl.cpp
@@ -208,21 +256,25 @@ add_llvm_component_library(LLVMCodeGen
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/CodeGen
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/CodeGen/PBQP
 
-  LINK_LIBS ${LLVM_PTHREAD_LIB}
+  LINK_LIBS ${LLVM_PTHREAD_LIB} ${MLLinkDeps}
 
   DEPENDS
   intrinsics_gen
+  ${MLDeps}
 
   LINK_COMPONENTS
   Analysis
   BitReader
   BitWriter
+  CodeGenTypes
   Core
   MC
+  ObjCARC
   ProfileData
   Scalar
   Support
   Target
+  TargetParser
   TransformUtils
   )
 

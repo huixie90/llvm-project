@@ -47,8 +47,7 @@ public:
     for (auto &KV : Segs) {
       assert(KV.second.ContentSize <= std::numeric_limits<size_t>::max());
       FR.Segments.push_back(tpctypes::SegFinalizeRequest{
-          tpctypes::toWireProtectionFlags(
-              toSysMemoryProtectionFlags(KV.first.getMemProt())),
+          KV.first,
           KV.second.Addr,
           alignTo(KV.second.ContentSize + KV.second.ZeroFillSize,
                   Parent.EPC.getPageSize()),
@@ -56,17 +55,7 @@ public:
     }
 
     // Transfer allocation actions.
-    // FIXME: Merge JITLink and ORC SupportFunctionCall and Action list types,
-    //        turn this into a std::swap.
-    FR.Actions.reserve(G.allocActions().size());
-    for (auto &ActPair : G.allocActions())
-      FR.Actions.push_back({{ExecutorAddr(ActPair.Finalize.FnAddr),
-                             {ExecutorAddr(ActPair.Finalize.CtxAddr),
-                              ExecutorAddrDiff(ActPair.Finalize.CtxSize)}},
-                            {ExecutorAddr(ActPair.Dealloc.FnAddr),
-                             {ExecutorAddr(ActPair.Dealloc.CtxAddr),
-                              ExecutorAddrDiff(ActPair.Dealloc.CtxSize)}}});
-    G.allocActions().clear();
+    std::swap(FR.Actions, G.allocActions());
 
     Parent.EPC.callSPSWrapperAsync<
         rt::SPSSimpleExecutorMemoryManagerFinalizeSignature>(
@@ -169,7 +158,7 @@ void EPCGenericJITLinkMemoryManager::completeAllocation(
     auto &SegInfo = SegInfos[AG];
     SegInfo.ContentSize = Seg.ContentSize;
     SegInfo.ZeroFillSize = Seg.ZeroFillSize;
-    SegInfo.Addr = ExecutorAddr(Seg.Addr);
+    SegInfo.Addr = Seg.Addr;
     SegInfo.WorkingMem = Seg.WorkingMem;
   }
 

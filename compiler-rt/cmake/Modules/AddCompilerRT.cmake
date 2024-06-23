@@ -77,11 +77,21 @@ function(add_compiler_rt_object_libraries name)
       list(REMOVE_ITEM target_flags "-msse3")
     endif()
 
+    # Build the macOS sanitizers with Mac Catalyst support.
+    if (APPLE AND
+        "${COMPILER_RT_ENABLE_MACCATALYST}" AND
+        "${libname}" MATCHES ".*\.osx.*")
+      foreach(arch ${LIB_ARCHS_${libname}})
+        list(APPEND target_flags
+          "SHELL:-target ${arch}-apple-macos${DARWIN_osx_MIN_VER} -darwin-target-variant ${arch}-apple-ios13.1-macabi")
+      endforeach()
+    endif()
+
     set_target_compile_flags(${libname}
       ${extra_cflags_${libname}} ${target_flags})
     set_property(TARGET ${libname} APPEND PROPERTY
       COMPILE_DEFINITIONS ${LIB_DEFS})
-    set_target_properties(${libname} PROPERTIES FOLDER "Compiler-RT Libraries")
+    set_target_properties(${libname} PROPERTIES FOLDER "Compiler-RT/Libraries")
     if(APPLE)
       set_target_properties(${libname} PROPERTIES
         OSX_ARCHITECTURES "${LIB_ARCHS_${libname}}")
@@ -100,22 +110,11 @@ endmacro()
 
 function(add_compiler_rt_component name)
   add_custom_target(${name})
-  set_target_properties(${name} PROPERTIES FOLDER "Compiler-RT Misc")
+  set_target_properties(${name} PROPERTIES FOLDER "Compiler-RT/Components")
   if(COMMAND runtime_register_component)
     runtime_register_component(${name})
   endif()
   add_dependencies(compiler-rt ${name})
-endfunction()
-
-function(add_asm_sources output)
-  set(${output} ${ARGN} PARENT_SCOPE)
-  # CMake doesn't pass the correct architecture for Apple prior to CMake 3.19. https://gitlab.kitware.com/cmake/cmake/-/issues/20771
-  # MinGW didn't work correctly with assembly prior to CMake 3.17. https://gitlab.kitware.com/cmake/cmake/-/merge_requests/4287 and https://reviews.llvm.org/rGb780df052dd2b246a760d00e00f7de9ebdab9d09
-  # Workaround these two issues by compiling as C.
-  # Same workaround used in libunwind. Also update there if changed here.
-  if((APPLE AND CMAKE_VERSION VERSION_LESS 3.19) OR (MINGW AND CMAKE_VERSION VERSION_LESS 3.17))
-    set_source_files_properties(${ARGN} PROPERTIES LANGUAGE C)
-  endif()
 endfunction()
 
 macro(set_output_name output name arch)
@@ -128,7 +127,7 @@ macro(set_output_name output name arch)
       if(COMPILER_RT_DEFAULT_TARGET_ONLY)
         set(triple "${COMPILER_RT_DEFAULT_TARGET_TRIPLE}")
       else()
-        set(triple "${TARGET_TRIPLE}")
+        set(triple "${LLVM_TARGET_TRIPLE}")
       endif()
       # Except for baremetal, when using arch-suffixed runtime library names,
       # clang only looks for libraries named "arm" or "armhf", see
@@ -234,6 +233,17 @@ function(add_compiler_rt_runtime name type)
         get_compiler_rt_output_dir(${COMPILER_RT_DEFAULT_TARGET_ARCH} output_dir_${libname})
         get_compiler_rt_install_dir(${COMPILER_RT_DEFAULT_TARGET_ARCH} install_dir_${libname})
       endif()
+
+      # Build the macOS sanitizers with Mac Catalyst support.
+      if ("${COMPILER_RT_ENABLE_MACCATALYST}" AND
+          "${os}" MATCHES "^(osx)$")
+        foreach(arch ${LIB_ARCHS_${libname}})
+          list(APPEND extra_cflags_${libname}
+            "SHELL:-target ${arch}-apple-macos${DARWIN_osx_MIN_VER} -darwin-target-variant ${arch}-apple-ios13.1-macabi")
+          list(APPEND extra_link_flags_${libname}
+            "SHELL:-target ${arch}-apple-macos${DARWIN_osx_MIN_VER} -darwin-target-variant ${arch}-apple-ios13.1-macabi")
+        endforeach()
+      endif()
     endforeach()
   else()
     foreach(arch ${LIB_ARCHS})
@@ -283,7 +293,7 @@ function(add_compiler_rt_runtime name type)
     if(NOT TARGET ${LIB_PARENT_TARGET})
       add_custom_target(${LIB_PARENT_TARGET})
       set_target_properties(${LIB_PARENT_TARGET} PROPERTIES
-                            FOLDER "Compiler-RT Misc")
+                            FOLDER "Compiler-RT/Runtimes")
     endif()
   endif()
 
@@ -294,6 +304,10 @@ function(add_compiler_rt_runtime name type)
       set(COMPONENT_OPTION COMPONENT ${LIB_PARENT_TARGET})
     else()
       set(COMPONENT_OPTION COMPONENT ${libname})
+    endif()
+
+    if(type STREQUAL "SHARED")
+      list(APPEND LIB_DEFS COMPILER_RT_SHARED_LIB)
     endif()
 
     if(type STREQUAL "OBJECT")
@@ -334,6 +348,7 @@ function(add_compiler_rt_runtime name type)
           DEPENDS ${sources_${libname}}
           COMMENT "Building C object ${output_file_${libname}}")
       add_custom_target(${libname} DEPENDS ${output_dir_${libname}}/${output_file_${libname}})
+      set_target_properties(${libname} PROPERTIES FOLDER "Compiler-RT/Codegenning")
       install(FILES ${output_dir_${libname}}/${output_file_${libname}}
         DESTINATION ${install_dir_${libname}}
         ${COMPONENT_OPTION})
@@ -356,8 +371,8 @@ function(add_compiler_rt_runtime name type)
       add_dependencies(${libname} ${LIB_DEPS})
     endif()
     set_target_properties(${libname} PROPERTIES
-        OUTPUT_NAME ${output_name_${libname}})
-    set_target_properties(${libname} PROPERTIES FOLDER "Compiler-RT Runtime")
+        OUTPUT_NAME ${output_name_${libname}}
+        FOLDER "Compiler-RT/Runtimes")
     if(LIB_LINK_LIBS)
       target_link_libraries(${libname} PRIVATE ${LIB_LINK_LIBS})
     endif()
@@ -365,19 +380,42 @@ function(add_compiler_rt_runtime name type)
       target_link_libraries(${libname} PRIVATE ${builtins_${libname}})
     endif()
     if(${type} STREQUAL "SHARED")
-      if(COMMAND llvm_setup_rpath)
-        llvm_setup_rpath(${libname})
+      if(APPLE OR WIN32)
+        set_property(TARGET ${libname} PROPERTY BUILD_WITH_INSTALL_RPATH ON)
       endif()
       if(WIN32 AND NOT CYGWIN AND NOT MINGW)
         set_target_properties(${libname} PROPERTIES IMPORT_PREFIX "")
         set_target_properties(${libname} PROPERTIES IMPORT_SUFFIX ".lib")
       endif()
-      if(APPLE)
-        # Ad-hoc sign the dylibs
+      if (APPLE AND NOT CMAKE_LINKER MATCHES ".*lld.*")
+        # Apple's linker signs the resulting dylib with an ad-hoc code signature in
+        # most situations, except:
+        # 1. Versions of ld64 prior to ld64-609 in Xcode 12 predate this behavior.
+        # 2. Apple's new linker does not when building with `-darwin-target-variant`
+        #    to support macOS Catalyst.
+        #
+        # Explicitly re-signing the dylib works around both of these issues. The
+        # signature is marked as `linker-signed` when that is supported so that it
+        # behaves as expected when processed by subsequent tooling.
+        #
+        # Detect whether `codesign` supports `-o linker-signed` by passing it as an
+        # argument and looking for `invalid argument "linker-signed"` in its output.
+        # FIXME: Remove this once all supported toolchains support `-o linker-signed`.
+        execute_process(
+          COMMAND sh -c "codesign -f -s - -o linker-signed this-does-not-exist 2>&1 | grep -q linker-signed"
+          RESULT_VARIABLE CODESIGN_SUPPORTS_LINKER_SIGNED
+        )
+
+        set(EXTRA_CODESIGN_ARGUMENTS)
+        if (CODESIGN_SUPPORTS_LINKER_SIGNED)
+          list(APPEND EXTRA_CODESIGN_ARGUMENTS -o linker-signed)
+        endif()
+
         add_custom_command(TARGET ${libname}
-          POST_BUILD  
-          COMMAND codesign --sign - $<TARGET_FILE:${libname}>
+          POST_BUILD
+          COMMAND codesign --sign - ${EXTRA_CODESIGN_ARGUMENTS} $<TARGET_FILE:${libname}>
           WORKING_DIRECTORY ${COMPILER_RT_OUTPUT_LIBRARY_DIR}
+          COMMAND_EXPAND_LISTS
         )
       endif()
     endif()
@@ -461,7 +499,7 @@ function(add_compiler_rt_test test_suite test_name arch)
   set(output_dir "${output_dir}/${CMAKE_CFG_INTDIR}")
   file(MAKE_DIRECTORY "${output_dir}")
   set(output_bin "${output_dir}/${test_name}")
-  if(MSVC)
+  if(WIN32)
     set(output_bin "${output_bin}.exe")
   endif()
 
@@ -501,7 +539,7 @@ function(add_compiler_rt_test test_suite test_name arch)
     DEPENDS ${TEST_DEPS}
     )
   add_custom_target(T${test_name} DEPENDS "${output_bin}")
-  set_target_properties(T${test_name} PROPERTIES FOLDER "Compiler-RT Tests")
+  set_target_properties(T${test_name} PROPERTIES FOLDER "Compiler-RT/Tests")
 
   # Make the test suite depend on the binary.
   add_dependencies(${test_suite} T${test_name})
@@ -521,7 +559,7 @@ macro(add_compiler_rt_resource_file target_name file_name component)
     COMPONENT ${component})
   add_dependencies(${component} ${target_name})
 
-  set_target_properties(${target_name} PROPERTIES FOLDER "Compiler-RT Misc")
+  set_target_properties(${target_name} PROPERTIES FOLDER "Compiler-RT/Resources")
 endmacro()
 
 macro(add_compiler_rt_script name)
@@ -570,7 +608,7 @@ macro(add_custom_libcxx name prefix)
     COMMENT "Clobbering ${name} build directories"
     USES_TERMINAL
     )
-  set_target_properties(${name}-clear PROPERTIES FOLDER "Compiler-RT Misc")
+  set_target_properties(${name}-clear PROPERTIES FOLDER "Compiler-RT/Metatargets")
 
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${name}-clobber-stamp
@@ -582,9 +620,11 @@ macro(add_custom_libcxx name prefix)
 
   add_custom_target(${name}-clobber
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${name}-clobber-stamp)
-  set_target_properties(${name}-clobber PROPERTIES FOLDER "Compiler-RT Misc")
+  set_target_properties(${name}-clobber PROPERTIES FOLDER "Compiler-RT/Metatargets")
 
   set(PASSTHROUGH_VARIABLES
+    ANDROID
+    ANDROID_NATIVE_API_LEVEL
     CMAKE_C_COMPILER_TARGET
     CMAKE_CXX_COMPILER_TARGET
     CMAKE_SHARED_LINKER_FLAGS
@@ -601,7 +641,13 @@ macro(add_custom_libcxx name prefix)
     CMAKE_STRIP
     CMAKE_READELF
     CMAKE_SYSROOT
+    CMAKE_TOOLCHAIN_FILE
     LIBCXX_HAS_MUSL_LIBC
+    LIBCXX_HAS_GCC_S_LIB
+    LIBCXX_HAS_PTHREAD_LIB
+    LIBCXX_HAS_RT_LIB
+    LIBCXX_USE_COMPILER_RT
+    LIBCXXABI_HAS_PTHREAD_LIB
     PYTHON_EXECUTABLE
     Python3_EXECUTABLE
     Python2_EXECUTABLE
@@ -622,6 +668,10 @@ macro(add_custom_libcxx name prefix)
   get_property(CXX_FLAGS CACHE CMAKE_CXX_FLAGS PROPERTY VALUE)
   set(LIBCXX_CXX_FLAGS "${LIBCXX_CXX_FLAGS} ${CXX_FLAGS}")
 
+  if(CMAKE_VERBOSE_MAKEFILE)
+    set(verbose -DCMAKE_VERBOSE_MAKEFILE=ON)
+  endif()
+
   ExternalProject_Add(${name}
     DEPENDS ${name}-clobber ${LIBCXX_DEPS}
     PREFIX ${CMAKE_CURRENT_BINARY_DIR}/${name}
@@ -629,16 +679,18 @@ macro(add_custom_libcxx name prefix)
     BINARY_DIR ${prefix}
     CMAKE_ARGS ${CMAKE_PASSTHROUGH_VARIABLES}
                ${compiler_args}
+               ${verbose}
                -DCMAKE_C_FLAGS=${LIBCXX_C_FLAGS}
                -DCMAKE_CXX_FLAGS=${LIBCXX_CXX_FLAGS}
                -DCMAKE_BUILD_TYPE=Release
                -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
                -DLLVM_PATH=${LLVM_MAIN_SRC_DIR}
                -DLLVM_ENABLE_RUNTIMES=libcxx|libcxxabi
+               -DLIBCXXABI_USE_LLVM_UNWINDER=OFF
                -DLIBCXXABI_ENABLE_SHARED=OFF
                -DLIBCXXABI_HERMETIC_STATIC_LIBRARY=ON
                -DLIBCXXABI_INCLUDE_TESTS=OFF
-               -DLIBCXX_ENABLE_EXPERIMENTAL_LIBRARY=OFF
+               -DLIBCXX_CXX_ABI=libcxxabi
                -DLIBCXX_ENABLE_SHARED=OFF
                -DLIBCXX_HERMETIC_STATIC_LIBRARY=ON
                -DLIBCXX_INCLUDE_BENCHMARKS=OFF
@@ -714,6 +766,7 @@ function(configure_compiler_rt_lit_site_cfg input output)
   get_compiler_rt_output_dir(${COMPILER_RT_DEFAULT_TARGET_ARCH} output_dir)
 
   string(REPLACE ${CMAKE_CFG_INTDIR} ${LLVM_BUILD_MODE} COMPILER_RT_RESOLVED_TEST_COMPILER ${COMPILER_RT_TEST_COMPILER})
+  string(REPLACE ${CMAKE_CFG_INTDIR} ${LLVM_BUILD_MODE} COMPILER_RT_RESOLVED_OUTPUT_DIR ${COMPILER_RT_OUTPUT_DIR})
   string(REPLACE ${CMAKE_CFG_INTDIR} ${LLVM_BUILD_MODE} COMPILER_RT_RESOLVED_LIBRARY_OUTPUT_DIR ${output_dir})
 
   configure_lit_site_cfg(${input} ${output})

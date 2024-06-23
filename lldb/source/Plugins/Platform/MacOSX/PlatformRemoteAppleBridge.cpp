@@ -21,6 +21,7 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/FileSpec.h"
+#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
 
@@ -57,7 +58,7 @@ void PlatformRemoteAppleBridge::Terminate() {
 
 PlatformSP PlatformRemoteAppleBridge::CreateInstance(bool force,
                                                  const ArchSpec *arch) {
-  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PLATFORM));
+  Log *log = GetLog(LLDBLog::Platform);
   if (log) {
     const char *arch_name;
     if (arch && arch->GetArchitectureName())
@@ -102,9 +103,8 @@ PlatformSP PlatformRemoteAppleBridge::CreateInstance(bool force,
 #pragma warning(disable : 4065)
 #endif
         switch (triple.getOS()) {
-          // NEED_BRIDGEOS_TRIPLE case llvm::Triple::BridgeOS:
-          //  break;
-
+        case llvm::Triple::BridgeOS:
+          break;
         default:
           create = false;
           break;
@@ -137,7 +137,8 @@ llvm::StringRef PlatformRemoteAppleBridge::GetDescriptionStatic() {
   return "Remote BridgeOS platform plug-in.";
 }
 
-std::vector<ArchSpec> PlatformRemoteAppleBridge::GetSupportedArchitectures() {
+std::vector<ArchSpec> PlatformRemoteAppleBridge::GetSupportedArchitectures(
+    const ArchSpec &process_host_arch) {
   return {ArchSpec("arm64-apple-bridgeos")};
 }
 

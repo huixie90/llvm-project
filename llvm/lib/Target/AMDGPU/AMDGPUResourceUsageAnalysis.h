@@ -24,7 +24,7 @@ class GCNSubtarget;
 class MachineFunction;
 class TargetMachine;
 
-struct AMDGPUResourceUsageAnalysis : public CallGraphSCCPass {
+struct AMDGPUResourceUsageAnalysis : public ModulePass {
   static char ID;
 
 public:
@@ -50,14 +50,14 @@ public:
     int32_t getTotalNumVGPRs(const GCNSubtarget &ST) const;
   };
 
-  AMDGPUResourceUsageAnalysis() : CallGraphSCCPass(ID) {}
+  AMDGPUResourceUsageAnalysis() : ModulePass(ID) {}
 
-  bool runOnSCC(CallGraphSCC &SCC) override;
-
-  bool doInitialization(CallGraph &CG) override {
+  bool doInitialization(Module &M) override {
     CallGraphResourceInfo.clear();
-    return CallGraphSCCPass::doInitialization(CG);
+    return ModulePass::doInitialization(M);
   }
+
+  bool runOnModule(Module &M) override;
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<MachineModuleInfoWrapperPass>();
@@ -72,8 +72,10 @@ public:
   }
 
 private:
-  SIFunctionResourceInfo analyzeResourceUsage(const MachineFunction &MF,
-                                              const TargetMachine &TM) const;
+  SIFunctionResourceInfo
+  analyzeResourceUsage(const MachineFunction &MF, const TargetMachine &TM,
+                       uint32_t AssumedStackSizeForDynamicSizeObjects,
+                       uint32_t AssumedStackSizeForExternalCall) const;
   void propagateIndirectCallRegisterUsage();
 
   DenseMap<const Function *, SIFunctionResourceInfo> CallGraphResourceInfo;

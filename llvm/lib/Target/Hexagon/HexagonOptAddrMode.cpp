@@ -47,6 +47,8 @@ static cl::opt<int> CodeGrowthLimit("hexagon-amode-growth-limit",
   cl::Hidden, cl::init(0), cl::desc("Code growth limit for address mode "
   "optimization"));
 
+extern cl::opt<unsigned> RDFFuncBlockLimit;
+
 namespace llvm {
 
   FunctionPass *createHexagonOptAddrMode();
@@ -313,12 +315,18 @@ bool HexagonOptAddrMode::isSafeToExtLR(NodeAddr<StmtNode *> SN,
       return false;
     }
 
+    // If the register is undefined (for example if it's a reserved register),
+    // it may still be possible to extend the range, but it's safer to be
+    // conservative and just punt.
+    if (LRExtRegRD == 0)
+      return false;
+
     MachineInstr *UseMI = NodeAddr<StmtNode *>(IA).Addr->getCode();
     NodeAddr<DefNode *> LRExtRegDN = DFG->addr<DefNode *>(LRExtRegRD);
     // Reaching Def to LRExtReg can't be a phi.
     if ((LRExtRegDN.Addr->getFlags() & NodeAttrs::PhiRef) &&
         MI->getParent() != UseMI->getParent())
-    return false;
+      return false;
   }
   return true;
 }
@@ -385,6 +393,10 @@ unsigned HexagonOptAddrMode::getBaseOpPosition(MachineInstr *MI) {
 }
 
 unsigned HexagonOptAddrMode::getOffsetOpPosition(MachineInstr *MI) {
+  assert(
+      (HII->getAddrMode(*MI) == HexagonII::BaseImmOffset) &&
+      "Looking for an offset in non-BaseImmOffset addressing mode instruction");
+
   const MCInstrDesc &MID = MI->getDesc();
   switch (MI->getOpcode()) {
   // vgather pseudos are mayLoad and mayStore
@@ -413,8 +425,9 @@ bool HexagonOptAddrMode::processAddUses(NodeAddr<StmtNode *> AddSN,
     NodeAddr<StmtNode *> SN = UN.Addr->getOwner(*DFG);
     MachineInstr *MI = SN.Addr->getCode();
     const MCInstrDesc &MID = MI->getDesc();
-    if ((!MID.mayLoad() && !MID.mayStore()))
-        return false;
+    if ((!MID.mayLoad() && !MID.mayStore()) ||
+        HII->getAddrMode(*MI) != HexagonII::BaseImmOffset)
+      return false;
 
     MachineOperand BaseOp = MI->getOperand(getBaseOpPosition(MI));
 
@@ -845,6 +858,14 @@ bool HexagonOptAddrMode::runOnMachineFunction(MachineFunction &MF) {
   if (skipFunction(MF.getFunction()))
     return false;
 
+  // Perform RDF optimizations only if number of basic blocks in the
+  // function is less than the limit
+  if (MF.size() > RDFFuncBlockLimit) {
+    LLVM_DEBUG(dbgs() << "Skipping " << getPassName()
+                      << ": too many basic blocks\n");
+    return false;
+  }
+
   bool Changed = false;
   auto &HST = MF.getSubtarget<HexagonSubtarget>();
   MRI = &MF.getRegInfo();
@@ -852,9 +873,8 @@ bool HexagonOptAddrMode::runOnMachineFunction(MachineFunction &MF) {
   HRI = HST.getRegisterInfo();
   const auto &MDF = getAnalysis<MachineDominanceFrontier>();
   MDT = &getAnalysis<MachineDominatorTree>();
-  const TargetOperandInfo TOI(*HII);
 
-  DataFlowGraph G(MF, *HII, *HRI, *MDT, MDF, TOI);
+  DataFlowGraph G(MF, *HII, *HRI, *MDT, MDF);
   // Need to keep dead phis because we can propagate uses of registers into
   // nodes dominated by those would-be phis.
   G.build(BuildOptions::KeepDeadPhis);
@@ -872,7 +892,7 @@ bool HexagonOptAddrMode::runOnMachineFunction(MachineFunction &MF) {
   for (NodeAddr<BlockNode *> BA : FA.Addr->members(*DFG))
     Changed |= processBlock(BA);
 
-  for (auto MI : Deleted)
+  for (auto *MI : Deleted)
     MI->eraseFromParent();
 
   if (Changed) {

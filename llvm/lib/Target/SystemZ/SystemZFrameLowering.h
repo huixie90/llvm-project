@@ -22,7 +22,7 @@ class SystemZSubtarget;
 class SystemZFrameLowering : public TargetFrameLowering {
 public:
   SystemZFrameLowering(StackDirection D, Align StackAl, int LAO, Align TransAl,
-                       bool StackReal);
+                       bool StackReal, unsigned PointerSize);
 
   static std::unique_ptr<SystemZFrameLowering>
   create(const SystemZSubtarget &STI);
@@ -41,16 +41,28 @@ public:
   }
 
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
-  MachineBasicBlock::iterator
-  eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
-                                MachineBasicBlock::iterator MI) const override;
+
+  // Return the offset of the backchain.
+  virtual unsigned getBackchainOffset(MachineFunction &MF) const = 0;
+
+  // Return the offset of the return address.
+  virtual int getReturnAddressOffset(MachineFunction &MF) const = 0;
+
+  // Get or create the frame index of where the old frame pointer is stored.
+  virtual int getOrCreateFramePointerSaveIndex(MachineFunction &MF) const = 0;
+
+  // Return the size of a pointer (in bytes).
+  unsigned getPointerSize() const { return PointerSize; }
+
+private:
+  unsigned PointerSize;
 };
 
 class SystemZELFFrameLowering : public SystemZFrameLowering {
   IndexedMap<unsigned> RegSpillOffsets;
 
 public:
-  SystemZELFFrameLowering();
+  SystemZELFFrameLowering(unsigned PointerSize);
 
   // Override TargetFrameLowering.
   bool
@@ -77,6 +89,9 @@ public:
   bool hasFP(const MachineFunction &MF) const override;
   StackOffset getFrameIndexReference(const MachineFunction &MF, int FI,
                                      Register &FrameReg) const override;
+  void
+  orderFrameObjects(const MachineFunction &MF,
+                    SmallVectorImpl<int> &ObjectsToAllocate) const override;
 
   // Return the byte offset from the incoming stack pointer of Reg's
   // ABI-defined save slot.  Return 0 if no slot is defined for Reg.  Adjust
@@ -86,20 +101,25 @@ public:
   bool usePackedStack(MachineFunction &MF) const;
 
   // Return the offset of the backchain.
-  unsigned getBackchainOffset(MachineFunction &MF) const {
+  unsigned getBackchainOffset(MachineFunction &MF) const override {
     // The back chain is stored topmost with packed-stack.
     return usePackedStack(MF) ? SystemZMC::ELFCallFrameSize - 8 : 0;
   }
 
+  // Return the offset of the return address.
+  int getReturnAddressOffset(MachineFunction &MF) const override {
+    return (usePackedStack(MF) ? -2 : 14) * getPointerSize();
+  }
+
   // Get or create the frame index of where the old frame pointer is stored.
-  int getOrCreateFramePointerSaveIndex(MachineFunction &MF) const;
+  int getOrCreateFramePointerSaveIndex(MachineFunction &MF) const override;
 };
 
 class SystemZXPLINKFrameLowering : public SystemZFrameLowering {
   IndexedMap<unsigned> RegSpillOffsets;
 
 public:
-  SystemZXPLINKFrameLowering();
+  SystemZXPLINKFrameLowering(unsigned PointerSize);
 
   bool
   assignCalleeSavedSpillSlots(MachineFunction &MF,
@@ -124,10 +144,29 @@ public:
 
   void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
 
+  void inlineStackProbe(MachineFunction &MF,
+                        MachineBasicBlock &PrologMBB) const override;
+
   bool hasFP(const MachineFunction &MF) const override;
 
   void processFunctionBeforeFrameFinalized(MachineFunction &MF,
                                            RegScavenger *RS) const override;
+
+  void determineFrameLayout(MachineFunction &MF) const;
+
+  // Return the offset of the backchain.
+  unsigned getBackchainOffset(MachineFunction &MF) const override {
+    // The back chain is always the first element of the frame.
+    return 0;
+  }
+
+  // Return the offset of the return address.
+  int getReturnAddressOffset(MachineFunction &MF) const override {
+    return 3 * getPointerSize();
+  }
+
+  // Get or create the frame index of where the old frame pointer is stored.
+  int getOrCreateFramePointerSaveIndex(MachineFunction &MF) const override;
 };
 } // end namespace llvm
 

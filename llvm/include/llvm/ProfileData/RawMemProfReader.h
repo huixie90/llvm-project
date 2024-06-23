@@ -1,6 +1,4 @@
-#ifndef LLVM_PROFILEDATA_RAWMEMPROFREADER_H_
-#define LLVM_PROFILEDATA_RAWMEMPROFREADER_H_
-//===- MemProfReader.h - Instrumented memory profiling reader ---*- C++ -*-===//
+//===- RawMemProfReader.h - Instrumented memory profiling reader *- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,36 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains support for reading MemProf profiling data.
+// This file just includes MemProfReader.h for compatibility with
+// out-of-tree users.
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Support/Error.h"
-#include "llvm/Support/MemoryBuffer.h"
+#ifndef LLVM_PROFILEDATA_RAWMEMPROFREADER_H_
+#define LLVM_PROFILEDATA_RAWMEMPROFREADER_H_
 
-namespace llvm {
-namespace memprof {
-
-class RawMemProfReader {
-public:
-  RawMemProfReader(std::unique_ptr<MemoryBuffer> DataBuffer)
-      : DataBuffer(std::move(DataBuffer)) {}
-  // Prints aggregate counts for each raw profile parsed from the DataBuffer.
-  void printSummaries(raw_ostream &OS) const;
-
-  // Return true if the \p DataBuffer starts with magic bytes indicating it is
-  // a raw binary memprof profile.
-  static bool hasFormat(const MemoryBuffer &DataBuffer);
-
-  // Create a RawMemProfReader after sanity checking the contents of the file at
-  // \p Path.
-  static Expected<std::unique_ptr<RawMemProfReader>> create(const Twine &Path);
-
-private:
-  std::unique_ptr<MemoryBuffer> DataBuffer;
-};
-
-} // namespace memprof
-} // namespace llvm
+#include "llvm/ProfileData/MemProfReader.h"
 
 #endif // LLVM_PROFILEDATA_RAWMEMPROFREADER_H_

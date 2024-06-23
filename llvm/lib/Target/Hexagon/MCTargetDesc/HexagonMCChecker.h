@@ -17,7 +17,6 @@
 #include "MCTargetDesc/HexagonMCInstrInfo.h"
 #include "MCTargetDesc/HexagonMCTargetDesc.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/SMLoc.h"
 #include <set>
 #include <utility>
@@ -104,6 +103,7 @@ class HexagonMCChecker {
   bool checkCOFMax1();
   bool checkLegalVecRegPair();
   bool checkValidTmpDst();
+  bool checkHVXAccum();
 
   static void compoundRegisterMap(unsigned &);
 

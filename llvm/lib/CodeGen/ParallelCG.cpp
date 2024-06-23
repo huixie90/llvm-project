@@ -16,8 +16,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
-#include "llvm/Support/ErrorOr.h"
-#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/MemoryBufferRef.h"
 #include "llvm/Support/ThreadPool.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Utils/SplitModule.h"
@@ -53,7 +52,7 @@ void llvm::splitCodeGen(
   // Create ThreadPool in nested scope so that threads will be joined
   // on destruction.
   {
-    ThreadPool CodegenThreadPool(hardware_concurrency(OSs.size()));
+    DefaultThreadPool CodegenThreadPool(hardware_concurrency(OSs.size()));
     int ThreadCount = 0;
 
     SplitModule(
@@ -80,9 +79,7 @@ void llvm::splitCodeGen(
               [TMFactory, FileType, ThreadOS](const SmallString<0> &BC) {
                 LLVMContext Ctx;
                 Expected<std::unique_ptr<Module>> MOrErr = parseBitcodeFile(
-                    MemoryBufferRef(StringRef(BC.data(), BC.size()),
-                                    "<split-module>"),
-                    Ctx);
+                    MemoryBufferRef(BC.str(), "<split-module>"), Ctx);
                 if (!MOrErr)
                   report_fatal_error("Failed to read bitcode");
                 std::unique_ptr<Module> MPartInCtx = std::move(MOrErr.get());

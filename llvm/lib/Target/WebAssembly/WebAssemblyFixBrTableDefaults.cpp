@@ -16,6 +16,7 @@
 
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
 #include "WebAssembly.h"
+#include "WebAssemblySubtarget.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -130,7 +131,7 @@ MachineBasicBlock *fixBrTableDefault(MachineInstr &MI, MachineBasicBlock *MBB,
       return nullptr;
 
     // Remove the dummy default target and install the real one.
-    MI.RemoveOperand(MI.getNumExplicitOperands() - 1);
+    MI.removeOperand(MI.getNumExplicitOperands() - 1);
     MI.addOperand(MF, MachineOperand::CreateMBB(TBB));
   }
 
@@ -158,19 +159,21 @@ bool WebAssemblyFixBrTableDefaults::runOnMachineFunction(MachineFunction &MF) {
                     << MF.getName() << '\n');
 
   bool Changed = false;
-  SmallPtrSet<MachineBasicBlock *, 16> MBBSet;
+  SetVector<MachineBasicBlock *, SmallVector<MachineBasicBlock *, 16>,
+            DenseSet<MachineBasicBlock *>, 16>
+      MBBSet;
   for (auto &MBB : MF)
     MBBSet.insert(&MBB);
 
   while (!MBBSet.empty()) {
     MachineBasicBlock *MBB = *MBBSet.begin();
-    MBBSet.erase(MBB);
+    MBBSet.remove(MBB);
     for (auto &MI : *MBB) {
-      if (WebAssembly::isBrTable(MI)) {
+      if (WebAssembly::isBrTable(MI.getOpcode())) {
         fixBrTableIndex(MI, MBB, MF);
         auto *Fixed = fixBrTableDefault(MI, MBB, MF);
         if (Fixed != nullptr) {
-          MBBSet.erase(Fixed);
+          MBBSet.remove(Fixed);
           Changed = true;
         }
         break;

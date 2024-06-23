@@ -157,8 +157,7 @@ declare void @undef_func()
 ; GFX908: .amdhsa_next_free_vgpr 32
 ; GFX90A: .amdhsa_next_free_vgpr 64
 ; GFX90A: .amdhsa_accum_offset 32
-; GCN908: NumVgprs: 128
-; GCN90A: NumVgprs: 256
+; GCN:    NumVgprs: 32
 ; GCN:    NumAgprs: 32
 ; GFX908: TotalNumVgprs: 32
 ; GFX90A: TotalNumVgprs: 64

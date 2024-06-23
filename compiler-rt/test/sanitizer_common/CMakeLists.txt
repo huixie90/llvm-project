@@ -7,7 +7,7 @@ set(SANITIZER_COMMON_TESTSUITES)
 # FIXME(dliew): We should switch to COMPILER_RT_SANITIZERS_TO_BUILD instead of
 # the hard coded `SUPPORTED_TOOLS_INIT` list once we know that the other
 # sanitizers work.
-set(SUPPORTED_TOOLS_INIT asan lsan msan tsan ubsan)
+set(SUPPORTED_TOOLS_INIT asan lsan hwasan msan tsan ubsan)
 set(SUPPORTED_TOOLS)
   foreach(SANITIZER_TOOL ${SUPPORTED_TOOLS_INIT})
     string(TOUPPER ${SANITIZER_TOOL} SANITIZER_TOOL_UPPER)
@@ -114,6 +114,4 @@ if(SANITIZER_COMMON_TESTSUITES)
   add_lit_testsuite(check-sanitizer "Running sanitizer_common tests"
     ${SANITIZER_COMMON_TESTSUITES}
     DEPENDS ${SANITIZER_COMMON_TEST_DEPS})
-  set_target_properties(check-sanitizer PROPERTIES FOLDER
-                        "Compiler-RT Misc")
 endif()

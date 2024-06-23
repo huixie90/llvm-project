@@ -71,13 +71,13 @@ MCTargetStreamer *createARMTargetAsmStreamer(MCStreamer &S,
                                              bool isVerboseAsm);
 MCTargetStreamer *createARMObjectTargetStreamer(MCStreamer &S,
                                                 const MCSubtargetInfo &STI);
+MCTargetStreamer *createARMObjectTargetELFStreamer(MCStreamer &S);
+MCTargetStreamer *createARMObjectTargetWinCOFFStreamer(MCStreamer &S);
 
 MCCodeEmitter *createARMLEMCCodeEmitter(const MCInstrInfo &MCII,
-                                        const MCRegisterInfo &MRI,
                                         MCContext &Ctx);
 
 MCCodeEmitter *createARMBEMCCodeEmitter(const MCInstrInfo &MCII,
-                                        const MCRegisterInfo &MRI,
                                         MCContext &Ctx);
 
 MCAsmBackend *createARMLEAsmBackend(const Target &T, const MCSubtargetInfo &STI,
@@ -94,7 +94,6 @@ MCStreamer *createARMWinCOFFStreamer(MCContext &Context,
                                      std::unique_ptr<MCAsmBackend> &&MAB,
                                      std::unique_ptr<MCObjectWriter> &&OW,
                                      std::unique_ptr<MCCodeEmitter> &&Emitter,
-                                     bool RelaxAll,
                                      bool IncrementalLinkerCompatible);
 
 /// Construct an ELF Mach-O object writer.
@@ -139,6 +138,7 @@ bool isCDECoproc(size_t Coproc, const MCSubtargetInfo &STI);
 // Defines symbolic names for the ARM instructions.
 //
 #define GET_INSTRINFO_ENUM
+#define GET_INSTRINFO_MC_HELPER_DECLS
 #include "ARMGenInstrInfo.inc"
 
 #define GET_SUBTARGETINFO_ENUM

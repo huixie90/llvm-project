@@ -11,6 +11,7 @@
 
 #include <cstdint>
 
+#include <optional>
 #include <vector>
 
 #include "lldb/Symbol/ObjectFile.h"
@@ -68,12 +69,12 @@ public:
   }
 
   static lldb_private::ObjectFile *
-  CreateInstance(const lldb::ModuleSP &module_sp, lldb::DataBufferSP &data_sp,
+  CreateInstance(const lldb::ModuleSP &module_sp, lldb::DataBufferSP data_sp,
                  lldb::offset_t data_offset, const lldb_private::FileSpec *file,
                  lldb::offset_t file_offset, lldb::offset_t length);
 
   static lldb_private::ObjectFile *CreateMemoryInstance(
-      const lldb::ModuleSP &module_sp, lldb::DataBufferSP &data_sp,
+      const lldb::ModuleSP &module_sp, lldb::WritableDataBufferSP data_sp,
       const lldb::ProcessSP &process_sp, lldb::addr_t header_addr);
 
   static size_t GetModuleSpecifications(const lldb_private::FileSpec &file,
@@ -124,7 +125,7 @@ public:
 
   /// Return the contents of the .gnu_debuglink section, if the object file
   /// contains it.
-  llvm::Optional<lldb_private::FileSpec> GetDebugLink();
+  std::optional<lldb_private::FileSpec> GetDebugLink();
 
   uint32_t GetDependentModules(lldb_private::FileSpecList &files) override;
 
@@ -159,13 +160,17 @@ protected:
   std::vector<LoadableData>
   GetLoadableData(lldb_private::Target &target) override;
 
+  static lldb::WritableDataBufferSP
+  MapFileDataWritable(const lldb_private::FileSpec &file, uint64_t Size,
+                      uint64_t Offset);
+
 private:
-  ObjectFileELF(const lldb::ModuleSP &module_sp, lldb::DataBufferSP &data_sp,
+  ObjectFileELF(const lldb::ModuleSP &module_sp, lldb::DataBufferSP data_sp,
                 lldb::offset_t data_offset, const lldb_private::FileSpec *file,
                 lldb::offset_t offset, lldb::offset_t length);
 
   ObjectFileELF(const lldb::ModuleSP &module_sp,
-                lldb::DataBufferSP &header_data_sp,
+                lldb::DataBufferSP header_data_sp,
                 const lldb::ProcessSP &process_sp, lldb::addr_t header_addr);
 
   typedef std::vector<elf::ELFProgramHeader> ProgramHeaderColl;
@@ -182,6 +187,9 @@ private:
   typedef DynamicSymbolColl::iterator DynamicSymbolCollIter;
   typedef DynamicSymbolColl::const_iterator DynamicSymbolCollConstIter;
 
+  /// An ordered map of file address to address class. Used on architectures
+  /// like Arm where there is an alternative ISA mode like Thumb. The container
+  /// is ordered so that it can be binary searched.
   typedef std::map<lldb::addr_t, lldb_private::AddressClass>
       FileAddressToAddressClassMap;
 
@@ -280,18 +288,19 @@ private:
 
   /// Populates the symbol table with all non-dynamic linker symbols.  This
   /// method will parse the symbols only once.  Returns the number of symbols
-  /// parsed.
-  unsigned ParseSymbolTable(lldb_private::Symtab *symbol_table,
-                            lldb::user_id_t start_id,
-                            lldb_private::Section *symtab);
+  /// parsed and a map of address types (used by targets like Arm that have
+  /// an alternative ISA mode like Thumb).
+  std::pair<unsigned, FileAddressToAddressClassMap>
+  ParseSymbolTable(lldb_private::Symtab *symbol_table, lldb::user_id_t start_id,
+                   lldb_private::Section *symtab);
 
   /// Helper routine for ParseSymbolTable().
-  unsigned ParseSymbols(lldb_private::Symtab *symbol_table,
-                        lldb::user_id_t start_id,
-                        lldb_private::SectionList *section_list,
-                        const size_t num_symbols,
-                        const lldb_private::DataExtractor &symtab_data,
-                        const lldb_private::DataExtractor &strtab_data);
+  std::pair<unsigned, FileAddressToAddressClassMap>
+  ParseSymbols(lldb_private::Symtab *symbol_table, lldb::user_id_t start_id,
+               lldb_private::SectionList *section_list,
+               const size_t num_symbols,
+               const lldb_private::DataExtractor &symtab_data,
+               const lldb_private::DataExtractor &strtab_data);
 
   /// Scans the relocation entries and adds a set of artificial symbols to the
   /// given symbol table for each PLT slot.  Returns the number of symbols

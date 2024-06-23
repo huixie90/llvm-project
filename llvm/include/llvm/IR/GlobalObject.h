@@ -22,7 +22,6 @@
 namespace llvm {
 
 class Comdat;
-class MDNode;
 class Metadata;
 
 class GlobalObject : public GlobalValue {
@@ -44,15 +43,15 @@ protected:
   GlobalObject(Type *Ty, ValueTy VTy, Use *Ops, unsigned NumOps,
                LinkageTypes Linkage, const Twine &Name,
                unsigned AddressSpace = 0)
-      : GlobalValue(Ty, VTy, Ops, NumOps, Linkage, Name, AddressSpace),
-        ObjComdat(nullptr) {
+      : GlobalValue(Ty, VTy, Ops, NumOps, Linkage, Name, AddressSpace) {
     setGlobalValueSubClassData(0);
   }
   ~GlobalObject();
 
-  Comdat *ObjComdat;
+  Comdat *ObjComdat = nullptr;
   enum {
     LastAlignmentBit = 5,
+    LastCodeModelBit = 8,
     HasSectionHashEntryBit,
 
     GlobalObjectBits,
@@ -84,6 +83,12 @@ public:
     return decodeMaybeAlign(AlignmentData);
   }
 
+  /// Sets the alignment attribute of the GlobalObject.
+  void setAlignment(Align Align);
+
+  /// Sets the alignment attribute of the GlobalObject.
+  /// This method will be deprecated as the alignment property should always be
+  /// defined.
   void setAlignment(MaybeAlign Align);
 
   unsigned getGlobalObjectSubClassData() const {
@@ -128,6 +133,7 @@ public:
   using Value::addMetadata;
   using Value::clearMetadata;
   using Value::eraseMetadata;
+  using Value::eraseMetadataIf;
   using Value::getAllMetadata;
   using Value::getMetadata;
   using Value::hasMetadata;
