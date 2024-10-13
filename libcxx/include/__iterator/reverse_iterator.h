@@ -136,16 +136,10 @@ public:
   _LIBCPP_HIDE_FROM_ABI constexpr pointer operator->() const
     requires is_pointer_v<_Iter> || requires(const _Iter __i) { __i.operator->(); }
   {
-    // std::prev does not work for bidirectional_iterator && !LegacyBidirectionalIterator
-    const auto __get_prev = [this]{
-      auto __tmp = current;
-      --__tmp;
-      return __tmp;
-    };
     if constexpr (is_pointer_v<_Iter>) {
-      return __get_prev();
+      return std::prev(current);
     } else {
-      return __get_prev().operator->();
+      return std::prev(current).operator->();
     }
   }
 #else
