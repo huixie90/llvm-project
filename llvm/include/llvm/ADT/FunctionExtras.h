@@ -35,11 +35,9 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/STLForwardCompat.h"
-#include "llvm/Support/Compiler.h"
 #include "llvm/Support/MemAlloc.h"
 #include "llvm/Support/type_traits.h"
 #include <cstring>
-#include <memory>
 #include <type_traits>
 
 namespace llvm {
@@ -90,13 +88,12 @@ protected:
   template <typename T> struct AdjustedParamTBase {
     static_assert(!std::is_reference<T>::value,
                   "references should be handled by template specialization");
-    template <typename U>
-    using IsSizeLessThanThresholdT =
-        std::bool_constant<sizeof(U) <= 2 * sizeof(void *)>;
+    static constexpr bool IsSizeLessThanThreshold =
+        sizeof(T) <= 2 * sizeof(void *);
     using type =
         std::conditional_t<std::is_trivially_copy_constructible<T>::value &&
                                std::is_trivially_move_constructible<T>::value &&
-                               IsSizeLessThanThresholdT<T>::value,
+                               IsSizeLessThanThreshold,
                            T, T &>;
   };
 
@@ -312,10 +309,8 @@ protected:
     // Clear the old callback and inline flag to get back to as-if-null.
     RHS.CallbackAndInlineFlag = {};
 
-#if !defined(NDEBUG) && !LLVM_ADDRESS_SANITIZER_BUILD
-    // In debug builds without ASan, we also scribble across the rest of the
-    // storage. Scribbling under AddressSanitizer (ASan) is disabled to prevent
-    // overwriting poisoned objects (e.g., annotated short strings).
+#ifndef NDEBUG
+    // In debug builds, we also scribble across the rest of the storage.
     memset(RHS.getInlineStorage(), 0xAD, InlineStorageSize);
 #endif
   }

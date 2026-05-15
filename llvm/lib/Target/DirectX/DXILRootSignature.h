@@ -21,7 +21,6 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/MC/DXContainerRootSignature.h"
 #include "llvm/Pass.h"
-#include <optional>
 
 namespace llvm {
 namespace dxil {
@@ -84,7 +83,7 @@ public:
 
 /// Printer pass for RootSignatureAnalysis results.
 class RootSignatureAnalysisPrinter
-    : public PassInfoMixin<RootSignatureAnalysisPrinter> {
+    : public OptionalPassInfoMixin<RootSignatureAnalysisPrinter> {
   raw_ostream &OS;
 
 public:

@@ -95,6 +95,9 @@ std::string AsFortran(IgnoreTKRSet tkr) {
   if (tkr.test(IgnoreTKR::Contiguous)) {
     result += 'C';
   }
+  if (tkr.test(IgnoreTKR::Pointer)) {
+    result += 'P';
+  }
   return result;
 }
 
@@ -114,6 +117,9 @@ bool AreCompatibleCUDADataAttrs(std::optional<CUDADataAttr> x,
   if (ignoreTKR.test(common::IgnoreTKR::Device)) {
     return true;
   }
+  // A use_device(...) actual is compatible with any dummy.
+  if (y && *y == CUDADataAttr::UseDevice)
+    return true;
   if (!y && isHostDeviceProcedure) {
     return true;
   }
@@ -129,8 +135,8 @@ bool AreCompatibleCUDADataAttrs(std::optional<CUDADataAttr> x,
       y.value_or(CUDADataAttr::Device) == CUDADataAttr::Device) {
     return true;
   } else if (ignoreTKR.test(IgnoreTKR::Managed) &&
-      x.value_or(CUDADataAttr::Managed) == CUDADataAttr::Managed &&
-      y.value_or(CUDADataAttr::Managed) == CUDADataAttr::Managed) {
+      (!x || *x == CUDADataAttr::Managed || *x == CUDADataAttr::Unified) &&
+      (!y || *y == CUDADataAttr::Managed || *y == CUDADataAttr::Unified)) {
     return true;
   } else if (allowUnifiedMatchingRule) {
     if (!x) { // Dummy argument has no attribute -> host

@@ -59,10 +59,7 @@ struct CodeCompleteOptions {
   bool ForceLoadPreamble = false;
 
   /// Combine overloads into a single completion item where possible.
-  /// If none, the implementation may choose an appropriate behavior.
-  /// (In practice, ClangdLSPServer enables bundling if the client claims
-  /// to supports signature help).
-  std::optional<bool> BundleOverloads;
+  bool BundleOverloads = false;
 
   /// Limit the number of results returned (0 means no limit).
   /// If more results are available, we set CompletionList.isIncomplete.
@@ -113,6 +110,11 @@ struct CodeCompleteOptions {
 
   /// Whether to suggest code patterns & snippets or not in completion
   Config::CodePatternsPolicy CodePatterns = Config::CodePatternsPolicy::All;
+
+  /// Filter macros using an exact prefix, or with a fuzzy match. In both cases,
+  /// macros with leading or trailing underscores are strictly filtered
+  Config::MacroFilterPolicy MacroFilter =
+      Config::MacroFilterPolicy::ExactPrefix;
 
   /// Whether to use the clang parser, or fallback to text-based completion
   /// (using identifiers in the current file and symbol indexes).
